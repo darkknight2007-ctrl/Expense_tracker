@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: expense-tracker
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true   # Render auto-generates a secure random value
+      - key: RENDER_DATA_DIR
+        value: /var/data      # Tells app.py where the persistent disk is mounted
+    disk:
+      name: sqlite-data
+      mountPath: /var/data
+      sizeGB: 1

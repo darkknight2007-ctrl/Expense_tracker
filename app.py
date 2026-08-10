@@ -8,9 +8,13 @@ from flask import (
 )
 
 app = Flask(__name__)
-app.secret_key = 'dev-secret-change-in-production'
+# Read secret key from environment; fall back to dev value locally.
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
 
-DATABASE = os.path.join(app.instance_path, 'expenses.db')
+# On Render the persistent disk is mounted at /var/data (set via RENDER_DATA_DIR).
+# Locally we fall back to Flask's instance/ folder so nothing breaks.
+_DATA_DIR = os.environ.get('RENDER_DATA_DIR', app.instance_path)
+DATABASE  = os.path.join(_DATA_DIR, 'expenses.db')
 
 CATEGORIES = [
     'Food', 'Transport', 'Housing', 'Health',
@@ -22,7 +26,8 @@ CATEGORIES = [
 
 def get_db():
     if 'db' not in g:
-        os.makedirs(app.instance_path, exist_ok=True)
+        # Ensure the data directory exists (matters both locally and on Render).
+        os.makedirs(_DATA_DIR, exist_ok=True)
         g.db = sqlite3.connect(DATABASE)
         g.db.row_factory = sqlite3.Row
     return g.db
@@ -281,4 +286,7 @@ with app.app_context():
     init_db()
 
 if __name__ == '__main__':
+    # Local development only.
+    # On Render, gunicorn is the entry point: `gunicorn app:app`
+    # Render injects $PORT automatically; gunicorn reads it — no hardcoding needed.
     app.run(debug=True)
