@@ -8,13 +8,9 @@ from flask import (
 )
 
 app = Flask(__name__)
-# Read secret key from environment; fall back to dev value locally.
-app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
-
-# On Render the persistent disk is mounted at /var/data (set via RENDER_DATA_DIR).
-# Locally we fall back to Flask's instance/ folder so nothing breaks.
-_DATA_DIR = os.environ.get('RENDER_DATA_DIR', app.instance_path)
-DATABASE  = os.path.join(_DATA_DIR, 'expenses.db')
+# SQLite database lives in Flask's instance/ folder.
+# On Render's free tier the filesystem is ephemeral; seed data re-fills it on restart.
+DATABASE = os.path.join(app.instance_path, 'expenses.db')
 
 CATEGORIES = [
     'Food', 'Transport', 'Housing', 'Health',
@@ -26,8 +22,8 @@ CATEGORIES = [
 
 def get_db():
     if 'db' not in g:
-        # Ensure the data directory exists (matters both locally and on Render).
-        os.makedirs(_DATA_DIR, exist_ok=True)
+        # Ensure the instance directory exists.
+        os.makedirs(app.instance_path, exist_ok=True)
         g.db = sqlite3.connect(DATABASE)
         g.db.row_factory = sqlite3.Row
     return g.db
@@ -41,6 +37,7 @@ def close_db(exc):
 
 
 def init_db():
+    """Create schema and seed sample data when the DB is brand new."""
     db = get_db()
     db.executescript("""
         CREATE TABLE IF NOT EXISTS expenses (
@@ -59,6 +56,51 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_date     ON expenses(date);
         CREATE INDEX IF NOT EXISTS idx_category ON expenses(category);
     """)
+    db.commit()
+    _seed_db(db)
+
+
+def _seed_db(db):
+    """Insert sample expenses only when the table is completely empty.
+
+    On Render's free tier the filesystem resets on every restart, so this
+    ensures the app always has something to display rather than an empty list.
+    Real user data entered during a session will be visible until the next
+    restart — this is a known limitation of the free tier without a disk.
+    """
+    count = db.execute("SELECT COUNT(*) FROM expenses").fetchone()[0]
+    if count > 0:
+        return  # Already has data — don't overwrite.
+
+    import datetime
+    today = datetime.date.today()
+    # Spread samples across the last two months so charts look interesting.
+    def days_ago(n):
+        return (today - datetime.timedelta(days=n)).isoformat()
+
+    sample_expenses = [
+        (12.50,  'Food',          days_ago(1),  'Lunch at cafe'),
+        (45.00,  'Transport',     days_ago(3),  'Monthly bus pass top-up'),
+        (8.99,   'Entertainment', days_ago(5),  'Netflix'),
+        (120.00, 'Housing',       days_ago(7),  'Electricity bill'),
+        (23.40,  'Food',          days_ago(10), 'Weekly groceries'),
+        (15.00,  'Health',        days_ago(14), 'Pharmacy'),
+        (60.00,  'Shopping',      days_ago(18), 'New headphones'),
+        (9.99,   'Education',     days_ago(20), 'Coursera subscription'),
+        (34.00,  'Food',          days_ago(25), 'Dinner with friends'),
+        (200.00, 'Housing',       days_ago(32), 'Internet bill'),
+        (18.75,  'Transport',     days_ago(35), 'Cab to airport'),
+        (55.00,  'Health',        days_ago(40), 'Gym membership'),
+    ]
+    db.executemany(
+        "INSERT INTO expenses (amount, category, date, note) VALUES (?, ?, ?, ?)",
+        sample_expenses
+    )
+    # Sample budget limits so the over-budget warning is visible.
+    db.executemany(
+        "INSERT OR IGNORE INTO budgets (category, monthly_limit) VALUES (?, ?)",
+        [('Food', 50.00), ('Housing', 150.00)]
+    )
     db.commit()
 
 
