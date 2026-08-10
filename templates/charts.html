@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Charts – ExpenseTracker{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<section class="page-header">
+  <h1>Spending Charts</h1>
+</section>
+
+{% if not monthly_labels and not cat_labels %}
+<div class="card" style="text-align:center; padding:3rem;">
+  <p style="color:var(--muted); font-size:1.1rem;">
+    No expense data yet. <a href="{{ url_for('index') }}" style="color:var(--accent);">Add some expenses</a> to see charts.
+  </p>
+</div>
+{% else %}
+
+<div class="charts-grid">
+
+  <!-- Monthly bar chart -->
+  <div class="chart-wrapper">
+    <h2>Monthly Spending</h2>
+    <canvas id="monthlyChart" height="260"></canvas>
+  </div>
+
+  <!-- Category pie chart -->
+  <div class="chart-wrapper">
+    <h2>By Category</h2>
+    <canvas id="categoryChart" height="260"></canvas>
+  </div>
+
+</div>
+
+<script>
+const ACCENT      = '#7c6af7';
+const ACCENT2     = '#5eead4';
+const SURFACE     = '#1a1d27';
+const BORDER      = '#2a2d3e';
+const TEXT        = '#e2e8f0';
+const MUTED       = '#64748b';
+
+// Pastel palette for pie slices
+const PIE_COLORS = [
+  '#7c6af7','#5eead4','#f472b6','#fbbf24',
+  '#34d399','#60a5fa','#f87171','#a78bfa',
+];
+
+// ── Jinja2 data (rendered server-side; linter may warn here — ignore) ──────
+const MONTHLY_LABELS = {{ monthly_labels | tojson }};
+const MONTHLY_VALUES = {{ monthly_values | tojson }};
+const CAT_LABELS     = {{ cat_labels | tojson }};
+const CAT_VALUES     = {{ cat_values | tojson }};
+
+Chart.defaults.color        = TEXT;
+Chart.defaults.borderColor  = BORDER;
+Chart.defaults.font.family  = "'Inter', system-ui, sans-serif";
+
+// ── Monthly bar chart ────────────────────────────────────
+const monthlyCtx = document.getElementById('monthlyChart').getContext('2d');
+new Chart(monthlyCtx, {
+  type: 'bar',
+  data: {
+    labels: MONTHLY_LABELS,
+    datasets: [{
+      label: 'Total Spend ($)',
+      data: MONTHLY_VALUES,
+      backgroundColor: 'rgba(124,106,247,.65)',
+      borderColor: ACCENT,
+      borderWidth: 2,
+      borderRadius: 6,
+      hoverBackgroundColor: 'rgba(124,106,247,.9)',
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => ` $${ctx.parsed.y.toFixed(2)}`
+        }
+      }
+    },
+    scales: {
+      x: { grid: { color: BORDER } },
+      y: {
+        grid: { color: BORDER },
+        ticks: { callback: v => `$${v}` }
+      }
+    }
+  }
+});
+
+// ── Category doughnut chart ──────────────────────────────
+const catCtx = document.getElementById('categoryChart').getContext('2d');
+new Chart(catCtx, {
+  type: 'doughnut',
+  data: {
+    labels: CAT_LABELS,
+    datasets: [{
+      data: CAT_VALUES,
+      backgroundColor: PIE_COLORS,
+      borderColor: SURFACE,
+      borderWidth: 3,
+      hoverOffset: 12,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: '60%',
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: { padding: 16, usePointStyle: true, pointStyleWidth: 10 }
+      },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            // ctx.raw is the actual data value for doughnut/pie in Chart.js 4
+            const value = ctx.raw;
+            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+            const pct   = ((value / total) * 100).toFixed(1);
+            return ` $${value.toFixed(2)} (${pct}%)`;
+          }
+        }
+      }
+    }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

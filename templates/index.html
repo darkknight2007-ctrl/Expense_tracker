@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Expenses – ExpenseTracker{% endblock %}
+
+{% block content %}
+
+<!-- ── Page header ──────────────────────────────────── -->
+<section class="page-header">
+  <h1>Expenses</h1>
+  <div style="display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
+    <span class="total-badge">Total: ${{ "%.2f"|format(total) }}</span>
+    <a class="btn btn-sm btn-edit"
+       href="{{ url_for('export_csv', category=category_filter, month=month_filter) }}">
+      ⬇ Export CSV
+    </a>
+  </div>
+</section>
+
+<!-- ── Add expense form ─────────────────────────────── -->
+<div class="card">
+  <h2>Add Expense</h2>
+  <form method="post" action="{{ url_for('add_expense') }}">
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="amount">Amount ($)</label>
+        <input id="amount" name="amount" type="number" step="0.01" min="0.01"
+               placeholder="0.00" required />
+      </div>
+      <div class="form-group">
+        <label for="category">Category</label>
+        <select id="category" name="category" required>
+          <option value="" disabled selected>Select…</option>
+          {% for cat in categories %}
+          <option value="{{ cat }}">{{ cat }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="date">Date</label>
+        <input id="date" name="date" type="date" required />
+      </div>
+      <div class="form-group">
+        <label for="note">Note (optional)</label>
+        <input id="note" name="note" type="text" placeholder="e.g. Lunch at cafe" />
+      </div>
+    </div>
+    <div class="form-actions" style="margin-top:1rem;">
+      <button class="btn btn-primary" type="submit">Add Expense</button>
+    </div>
+  </form>
+</div>
+
+<!-- ── Filters ──────────────────────────────────────── -->
+<form method="get" action="{{ url_for('index') }}" class="card filters">
+  <div class="form-group">
+    <label for="filter-category">Category</label>
+    <select id="filter-category" name="category">
+      <option value="">All categories</option>
+      {% for cat in all_categories %}
+      <option value="{{ cat }}" {% if cat == category_filter %}selected{% endif %}>{{ cat }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-group">
+    <label for="filter-month">Month</label>
+    <select id="filter-month" name="month">
+      <option value="">All months</option>
+      {% for m in all_months %}
+      <option value="{{ m }}" {% if m == month_filter %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex; gap:.5rem; align-items:flex-end;">
+    <button class="btn btn-primary btn-sm" type="submit">Filter</button>
+    {% if category_filter or month_filter %}
+    <a class="btn btn-sm btn-delete" href="{{ url_for('index') }}">Clear</a>
+    {% endif %}
+  </div>
+</form>
+
+<!-- ── Budget warnings ───────────────────────────────── -->
+{% if over_budget %}
+<div class="alert alert-warning">
+  ⚠️ Over budget this month:
+  {% for cat in over_budget %}
+    <strong>{{ cat }}</strong>{% if not loop.last %}, {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- ── Expense table ─────────────────────────────────── -->
+<div class="card">
+  <table class="expense-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Category</th>
+        <th>Amount</th>
+        <th>Note</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in expenses %}
+      <tr class="{% if e['category'] in over_budget %}over-budget{% endif %}">
+        <td>{{ e['date'] }}</td>
+        <td>
+          <span class="badge {% if e['category'] in over_budget %}badge-warning{% endif %}">
+            {{ e['category'] }}
+            {% if e['category'] in over_budget %}⚠{% endif %}
+          </span>
+        </td>
+        <td class="amount">${{ "%.2f"|format(e['amount']) }}</td>
+        <td>{{ e['note'] or '—' }}</td>
+        <td class="actions">
+          <a class="btn btn-sm btn-edit"
+             href="{{ url_for('edit_expense', expense_id=e['id']) }}">Edit</a>
+          <form method="post"
+                action="{{ url_for('delete_expense', expense_id=e['id']) }}"
+                class="delete-form"
+                style="display:inline">
+            <button class="btn btn-sm btn-delete" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="5" class="empty">No expenses found. Add one above!</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
+
+{% block head %}
+<script>
+  // Default today's date in the add form
+  document.addEventListener('DOMContentLoaded', () => {
+    const d = document.getElementById('date');
+    if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
+
+    // Confirm before deleting — uses submit event instead of onclick
+    // so it works reliably in all browser contexts
+    document.querySelectorAll('.delete-form').forEach(form => {
+      form.addEventListener('submit', e => {
+        if (!window.confirm('Delete this expense? This cannot be undone.')) {
+          e.preventDefault();
+        }
+      });
+    });
+  });
+</script>
+{% endblock %}
