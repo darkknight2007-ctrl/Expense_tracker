@@ -8,9 +8,23 @@ from flask import (
 )
 
 app = Flask(__name__)
-# SQLite database lives in Flask's instance/ folder.
-# On Render's free tier the filesystem is ephemeral; seed data re-fills it on restart.
-DATABASE = os.path.join(app.instance_path, 'expenses.db')
+# SECRET_KEY from env (Render sets it via render.yaml generateValue); dev fallback for local.
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
+
+# ── Database path ─────────────────────────────────────────────────────────────
+# On Render the source tree (/opt/render/project/src/) is READ-ONLY at runtime.
+# SQLite needs to write journal/WAL temp files alongside the .db, so any write
+# (INSERT/UPDATE/DELETE) throws "attempt to write a readonly database" there.
+#
+# Render automatically sets the RENDER env var in every service (free + paid).
+# /tmp/ is always writable on any Linux container — use it when on Render.
+# Locally we keep instance/ so the DB persists across dev restarts.
+if os.environ.get('RENDER'):
+    DATABASE = '/tmp/expenses.db'
+else:
+    DATABASE = os.path.join(app.instance_path, 'expenses.db')
+
+_DB_DIR = os.path.dirname(DATABASE)  # used by makedirs; /tmp already exists on Render
 
 CATEGORIES = [
     'Food', 'Transport', 'Housing', 'Health',
@@ -22,8 +36,8 @@ CATEGORIES = [
 
 def get_db():
     if 'db' not in g:
-        # Ensure the instance directory exists.
-        os.makedirs(app.instance_path, exist_ok=True)
+        # Create the DB directory if needed (no-op on Render since /tmp always exists).
+        os.makedirs(_DB_DIR, exist_ok=True)
         g.db = sqlite3.connect(DATABASE)
         g.db.row_factory = sqlite3.Row
     return g.db
