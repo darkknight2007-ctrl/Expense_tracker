@@ -1,6 +1,7 @@
 services:
   - type: web
     name: expense-tracker
+    plan: free
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
