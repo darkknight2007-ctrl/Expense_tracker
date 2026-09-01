@@ -218,6 +218,15 @@ textarea { resize: vertical; min-height: 60px; }
   border-radius: var(--radius);
   padding: 1.5rem;
   box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-canvas-container {
+  position: relative;   /* Chart.js needs a positioned ancestor */
+  flex: 1;              /* fill remaining space below the h2 */
+  min-height: 0;        /* prevent flex child from overflowing */
+  height: 300px;        /* explicit fallback height — stops the grow loop */
 }
 
 /* ── Filters ───────────────────────────────────────────────────────────────── */
